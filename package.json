@@ -1,0 +1,68 @@
+{
+  "name": "cachebank",
+  "version": "1.0.0",
+  "description": "A Caching Implementation",
+  "keywords": [
+    "cache,bank"
+  ],
+  "homepage": "https://github.com/Valen-H/CacheBank#README.md",
+  "bugs": {
+    "url": "https://github.com/Valen-H/CacheBank/issues",
+    "email": "alternativexxxy@gmail.com"
+  },
+  "license": "ISC",
+  "author": "V. H. <alternativexxxy@gmail.com> (https://github.com/Valen-H)",
+  "contributors": [],
+  "files": [
+    "*"
+  ],
+  "main": "dist/lib/bank.js",
+  "browser": false,
+  "man": [],
+  "directories": {
+    "lib": "./lib",
+    "bin": "./bin",
+    "man": "./man",
+    "doc": "./doc",
+    "example": "./test",
+    "test": "./test"
+  },
+  "typings": "./lib/typings/lib/bank.d.ts",
+  "typesVersions": {
+    ">=3.0": {
+      "*": [
+        "./lib/*"
+      ]
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/Valen-H/CacheBank.git",
+    "directory": "./"
+  },
+  "config": {
+    "port": 8080
+  },
+  "devDependencies": {},
+  "peerDependencies": {},
+  "optionalDependencies": {},
+  "engines": {
+    "node": ">=13.0.0",
+    "npm": ">=4.0.0"
+  },
+  "engineStrict": true,
+  "os": [],
+  "cpu": [],
+  "preferGlobal": false,
+  "private": false,
+  "publishConfig": {},
+  "scripts": {
+    "start": "node index.js",
+    "test": "node test/index.js",
+    "debug": "node --expose-gc --inspect -r ./ test/index.js",
+    "build": "tsc -w",
+    "doc": "jsdoc ./dist -r -c jsdoc.json -d ./doc -R README.md -P package.json",
+    "prepack": "rm *.tgz || true"
+  },
+  "bundleDependencies": []
+}
