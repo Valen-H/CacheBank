@@ -1,5 +1,5 @@
 {
-  "name": "cachebank",
+  "name": "@valen-h/cachebank",
   "version": "1.0.0",
   "description": "A Caching Implementation",
   "keywords": [

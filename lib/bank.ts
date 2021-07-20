@@ -13,12 +13,23 @@ export module cb {
 	 * 
 	 * @type {Function}
 	 */
-	export type Filter = (...data: any[]) => any;
+	export type Filter<T> = (...data: T[]) => T;
+	
+	/**
+	 * Commands.
+	 */
+	export enum Comm {
+		STOP = 1,
+		CONT = 2,
+		REM = 4,
+		INVAL = 8,
+		ERR = 16,
+	};
 	
 	/**
 	 * Bank.
 	 */
-	export interface Bank {
+	export interface Bank<T = any> {
 		/**
 		 * Max cache entries.
 		 * 
@@ -30,21 +41,64 @@ export module cb {
 		 * 
 		 * @type {any[]}
 		 */
-		data: any[];
+		data: CacheEntry<T>[];
 		/**
 		 * Filterer of data.
 		 * 
 		 * @param {any[]} data - data to process
 		 * @returns {any} - Processed Data
 		 */
-		filter: Filter;
+		filter: Filter<T | Filter<T> | Promise<T>>;
 	} //Bank
+	
+	/**
+	 * Cache Entries.
+	 * @class
+	 */
+	export class CacheEntry<T = any> {
+		
+		/**
+		 * Resource has loaded.
+		 */
+		public loaded: boolean = false;
+		/**
+		 * Resource issue time.
+		 */
+		public readonly issued: number = Date.now();
+		/**
+		 * Resource loaded time.
+		 */
+		public completed?: number;
+		
+		constructor(public data: T | Filter<T> | Promise<T>, unwind: boolean = true, cb?: (t: CacheEntry<T>, suc?: boolean) => T | Filter<T> | Promise<T>) {
+			if (unwind && this.data instanceof Promise && !this.completed) {
+				this.loaded = false;
+				
+				this.data.then((res: T): void => {
+					this.data = res;
+					this.loaded = true;
+					if (cb) this.data = cb(this, true);
+					this.completed = Date.now();
+				}).catch((rej: any): void => {
+					this.data = rej;
+					this.loaded = true;
+					if (cb) this.data = cb(this, false);
+					this.completed = Date.now();
+				});
+			} else {
+				this.loaded = true;
+				if (cb) cb(this);
+				this.completed = Date.now();
+			}
+		} //ctor
+		
+	} //CacheEntry
 	
 	/**
 	 * Caches Entries in Memory.
 	 * @class
 	 */
-	export class CacheBank implements Bank {
+	export class CacheBank<T = any> implements Bank<T> {
 		
 		public static defaults: Partial<Bank> = {
 			_size: 100,
@@ -60,11 +114,11 @@ export module cb {
 		/**
 		 * Entries.
 		 * 
-		 * @type {any[]}
+		 * @type {CacheEntry[]}
 		 */
-		public data: any[] = [ ];
+		public data: CacheEntry<T>[] = [ ];
 		
-		constructor(size: number = Number(CacheBank.defaults._size), filterer?: Filter, data?: any[]) {
+		constructor(size: number = Number(CacheBank.defaults._size), filterer?: Filter<T>, data?: CacheEntry<T>[]) {
 			this._size	= Number(size);
 			
 			if (data && data instanceof Array) this.data = data;
@@ -100,22 +154,18 @@ export module cb {
 		 * Cache a new Entry.
 		 * 
 		 * @param {any[]} data - entry
-		 * @returns {any[]} New Entries.
+		 * @returns {CacheEntry[][]} New Entries.
 		 */
-		cache(...data: any[]): any[] {
-			const out: any[] = data.map((d: any, i: number, a: any[]): any => {
-				let o: any = this.filter(d);
+		cache(data: Readonly<T>[], unwind?: boolean, cb?: (t: CacheEntry<T>, suc?: boolean) => T | Filter<T> | Promise<T>): [CacheEntry<T>[], CacheEntry<T>[]] {
+			const out: CacheEntry<T>[] = data.map((d: T, i: number, a: T[]): CacheEntry<T> => {
+				let o: CacheEntry<T> = new CacheEntry<T>(this.filter(d), unwind, cb);
 				
-				if (o instanceof Promise) o.then(res => this.data.push(o = res));
-				else if (typeof o == "function") o = this.cache(o = o(i, a))[0];
-				else this.data.push(o);
+				this.data.push(o);
 				
 				return o;
 			});
 			
-			this.trim();
-			
-			return out;
+			return [out, this.trim()];
 		} //cache
 		
 		/**
@@ -123,12 +173,20 @@ export module cb {
 		 * 
 		 * @param {any} data - with
 		 * @param {number} [times=this.remaining] - amount
-		 * @returns 
+		 * @returns {CacheEntry[][]} Records.
 		 */
-		consume(data: any, times: number = this.remaining): any[] {
-			const out: any[] = [ ];
+		consume(data: Readonly<T>, times: number = this.remaining, unwind: boolean = true, cb: (t: CacheEntry<T>, suc?: boolean) => T | Filter<T> | Promise<T> = t => t.data): [CacheEntry<T>[], CacheEntry<T>[]] {
+			/**
+			 * @type {CacheEntry[][]}
+			 */
+			const out: [CacheEntry<T>[], CacheEntry<T>[]] = [ [ ], [ ] ];
 			
-			while (times--) out.push(this.cache(data)[0]);
+			while (times--) {
+				const o: [CacheEntry<T>[], CacheEntry<T>[]] = this.cache([data], unwind, cb);
+				
+				out[0].push(o[0][0]);
+				if (o[1][0]) out[1].push(o[1][0]);
+			}
 			
 			return out;
 		} //consume
@@ -137,12 +195,33 @@ export module cb {
 		 * Trim oldest entries.
 		 * 
 		 * @param {number} [amt=this.remaining] by/amount
-		 * @returns Trimmed Entries.
+		 * @returns {CacheEntry[]} Trimmed Entries.
 		 */
-		trim(amt: number = this.remaining): any[] {
+		trim(amt: number = this.remaining < 0 ? this.remaining : 0): CacheEntry<T>[] {
 			if (amt > 0) return this.data.splice(0, amt);
 			else return [ ];
 		} //trim
+		
+		/**
+		 * Fetch/Clean Entries.
+		 * 
+		 * @param cond - condition
+		 * @returns 
+		 */
+		fetch(cond: (t: CacheEntry<T>) => Comm): T | Filter<T> | Promise<T> | undefined {
+			for (let i: number = 0; i < this.data.length; i++) {
+				const e: number = cond(this.data[i]);
+				
+				if (e == Comm.REM) {
+					this.data.splice(i, 1);
+					i--;
+				} else if (e == (Comm.REM | Comm.STOP)) {
+					return (this.data.splice(i, 1)[0] || { data: undefined }).data;
+				} else if (e == Comm.STOP) {
+					return this.data[i].data;
+				}
+			}
+		} //fetch
 		
 		/**
 		 * Filterer of data.
@@ -150,8 +229,12 @@ export module cb {
 		 * @param {any} data - data to process
 		 * @returns {any} Processed Data.
 		 */
-		filter(data: any): any {
+		filter(data: T | Filter<T> | Promise<T>): T | Filter<T> | Promise<T> {
 			//STUB
+			
+			//@ts-ignore
+			if (typeof data == "function") data = data(this, data);
+			
 			return data;
 		} //filter
 		
@@ -161,7 +244,7 @@ export module cb {
 		 * @param condition - condition
 		 * @returns This
 		 */
-		clear(condition: (data: any, index?: number, array?: any[]) => boolean = data => data): this {
+		clear(condition: (data: CacheEntry<T>, index?: number, array?: CacheEntry<T>[]) => boolean = data => !!data): this {
 			this.data = this.data.filter(condition);
 			
 			return this;
@@ -174,7 +257,7 @@ export module cb {
 			for (const i of this.data) yield i;
 		}
 		async *[Symbol.asyncIterator]() {
-			for (const i of this.data) yield await i;
+			for (const i of this.data) yield await i.data;
 		}
 		
 	} //CacheBank

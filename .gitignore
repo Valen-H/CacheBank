@@ -9,6 +9,7 @@ readme.htm
 *.htm
 *.tsbuildinfo
 *.tgz
+.npmrc
 
 
 ## Ignore Visual Studio temporary files, build results, and

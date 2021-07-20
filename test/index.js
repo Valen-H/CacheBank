@@ -7,7 +7,7 @@ const CB = require("../").cb,
 console.log(CB, cb);
 
 async function test() {
-	await Promise.all(cb.consume(() => new Promise(res => res(Math.random()))));
+	cb.consume(() => new Promise(res => res(Math.random())));
 	
 	for await (const i of cb) {
 		console.log(i);
